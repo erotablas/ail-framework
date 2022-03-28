@@ -83,7 +83,7 @@ Installation
 Type these command lines for a fully automated installation and start AIL framework:
 ```bash
 # Clone the repo first
-git clone https://github.com/ail-project/ail-framework.git
+git clone https://github.com/erotablas/ail-framework.git
 cd ail-framework
 
 # For Debian and Ubuntu based distributions
