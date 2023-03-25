@@ -85,7 +85,7 @@ https://github.com/saffsd/langid.py/archive/master.zip
 requests
 
 # Werkzeug
-Werkzeug==2.0.3
+Werkzeug==2.2.3
 
 ##### Old packages
 # texttable
