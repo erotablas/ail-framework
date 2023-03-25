@@ -1,90 +1,84 @@
 #!/usr/bin/env python3
 # -*-coding:UTF-8 -*
+
 """
-The Tracker_Regex trackers module
+The Tracker_Typo_Squatting Module
 ===================
 
-This Module is used for regex tracking.
-It processes every item coming from the global module and test the regex
-
 """
+
+##################################
+# Import External packages
+##################################
 import os
-import re
 import sys
 import time
 import requests
+
 
 sys.path.append(os.environ['AIL_BIN'])
 ##################################
 # Import Project packages
 ##################################
 from modules.abstract_module import AbstractModule
-from packages.Item import Item
-from packages import Term
-from lib import Tracker
-from lib import regex_helper
-
 import NotificationHelper
+from packages.Item import Item
+from lib import Tracker
 
-class Tracker_Regex(AbstractModule):
-
-    mail_body_template = "AIL Framework,\nNew occurrence for tracked regex: {}\nitem id: {}\nurl: {}{}"
+class Tracker_Typo_Squatting(AbstractModule):
+    mail_body_template = "AIL Framework,\nNew occurrence for tracked Typo: {}\nitem id: {}\nurl: {}{}"
 
     """
-    Tracker_Regex module for AIL framework
+    Tracker_Typo_Squatting module for AIL framework
     """
+
     def __init__(self):
-        super(Tracker_Regex, self).__init__()
+        super(Tracker_Typo_Squatting, self).__init__()
 
         self.pending_seconds = 5
 
-        self.max_execution_time = self.process.config.getint(self.module_name, "max_execution_time")
-
         self.full_item_url = self.process.config.get("Notifications", "ail_domain") + "/object/item?id="
 
-        self.redis_cache_key = regex_helper.generate_redis_cache_key(self.module_name)
-
-        # refresh Tracked Regex
-        self.dict_regex_tracked = Term.get_regex_tracked_words_dict()
-        self.last_refresh = time.time()
+        # loads typosquatting
+        self.typosquat_tracked_words_list = Tracker.get_typosquatting_tracked_words_list()
+        self.last_refresh_typosquat = time.time()
 
         self.redis_logger.info(f"Module: {self.module_name} Launched")
 
-    def compute(self, item_id, item_content=None):
-        # refresh Tracked regex
-        if self.last_refresh < Tracker.get_tracker_last_updated_by_type('regex'):
-            self.dict_regex_tracked = Term.get_regex_tracked_words_dict()
-            self.last_refresh = time.time()
-            self.redis_logger.debug('Tracked regex refreshed')
-            print('Tracked regex refreshed')
+    def compute(self, message):
+        # refresh Tracked typo
+        if self.last_refresh_typosquat < Tracker.get_tracker_last_updated_by_type('typosquatting'):
+            self.typosquat_tracked_words_list = Tracker.get_typosquatting_tracked_words_list()
+            self.last_refresh_typosquat = time.time()
+            self.redis_logger.debug('Tracked typosquatting refreshed')
+            print('Tracked typosquatting refreshed')
 
-        item = Item(item_id)
-        item_id = item.get_id()
-        if not item_content:
-            item_content = item.get_content()
+        host, id = message.split()
 
-        for regex in self.dict_regex_tracked:
-            matched = regex_helper.regex_search(self.module_name, self.redis_cache_key, self.dict_regex_tracked[regex], item_id, item_content, max_time=self.max_execution_time)
-            if matched:
-                self.new_tracker_found(regex, 'regex', item)
+        # Cast message as Item
+        for tracker in self.typosquat_tracked_words_list:
+            if host in self.typosquat_tracked_words_list[tracker]:
+                item = Item(id)
+                self.new_tracker_found(tracker, 'typosquatting', item)
 
     def new_tracker_found(self, tracker, tracker_type, item):
-        uuid_list = Tracker.get_tracker_uuid_list(tracker, tracker_type)
-
         item_id = item.get_id()
         item_date = item.get_date()
         item_source = item.get_source()
-        print(f'new tracked regex found: {tracker} in {item_id}')
-        self.redis_logger.warning(f'new tracked regex found: {tracker} in {item_id}')
+        #self.redis_logger.info(f'new tracked typo found: {tracker} in {item_id}')
+        print(f'new tracked typosquatting found: {tracker} in {item_id}')
+        self.redis_logger.warning(f'tracker typosquatting: {tracker} in {item_id}')
 
-        for tracker_uuid in uuid_list:
+        print(Tracker.get_tracker_uuid_list(tracker, tracker_type))
+        for tracker_uuid in Tracker.get_tracker_uuid_list(tracker, tracker_type):
             # Source Filtering
-            tracker_sources = Tracker.get_tracker_uuid_sources(tracker_uuid)
+            tracker_sources = Tracker.get_tracker_uuid_sources(tracker)
             if tracker_sources and item_source not in tracker_sources:
                 continue
 
             Tracker.add_tracked_item(tracker_uuid, item_id)
 
+            # Tags
             tags_to_add = Tracker.get_tracker_tags(tracker_uuid)
             for tag in tags_to_add:
                 msg = f'{tag};{item_id}'
@@ -93,12 +87,12 @@ class Tracker_Regex(AbstractModule):
             mail_to_notify = Tracker.get_tracker_mails(tracker_uuid)
             if mail_to_notify:
                 mail_subject = Tracker.get_email_subject(tracker_uuid)
-                mail_body = Tracker_Regex.mail_body_template.format(tracker, item_id, self.full_item_url, item_id)
+                mail_body = Tracker_Typo_Squatting.mail_body_template.format(tracker, item_id, self.full_item_url, item_id)
             for mail in mail_to_notify:
                 NotificationHelper.sendEmailNotification(mail, mail_subject, mail_body)
 
             # Webhook
-            webhook_to_post = Term.get_term_webhook(tracker_uuid)
+            webhook_to_post = Tracker.get_tracker_webhook(tracker_uuid)
             if webhook_to_post:
                 json_request = {"trackerId": tracker_uuid,
                                 "itemId": item_id,
@@ -118,6 +112,8 @@ class Tracker_Regex(AbstractModule):
                     self.redis_logger.error(f"Webhook request failed for {webhook_to_post}\nReason: Something went wrong")
 
 
-if __name__ == "__main__":
-    module = Tracker_Regex()
+
+if __name__ == '__main__':
+    module = Tracker_Typo_Squatting()
     module.run()
+    #module.compute('g00gle.com tests/2020/01/01/test.gz')

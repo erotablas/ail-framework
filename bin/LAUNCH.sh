@@ -19,15 +19,6 @@ if [ -e "${DIR}/AILENV/bin/python" ]; then
     ENV_PY="${DIR}/AILENV/bin/python"
     export AIL_VENV=${AIL_HOME}/AILENV/
     . ./AILENV/bin/activate
-elif [ ! -z "$TRAVIS" ]; then
-    echo "Travis detected"
-    ENV_PY="~/virtualenv/python3.6/bin/python"
-    export AIL_VENV="~/virtualenv/python3.6/"
-
-    export AIL_BIN=${AIL_HOME}/bin/
-    export AIL_FLASK=${AIL_HOME}/var/www/
-    export AIL_REDIS=${AIL_HOME}/redis/src/
-    export AIL_ARDB=${AIL_HOME}/ardb/src/
 else
     echo "Please make sure you have a AIL-framework environment, au revoir"
     exit 1
@@ -114,14 +105,37 @@ function launching_ardb {
 }
 
 function launching_logs {
+    conf_dir="${AIL_HOME}/configs/"
+    syslog_cmd=""
+    syslog_enabled=`cat $conf_dir/core.cfg | grep 'ail_logs_syslog' | cut -d " " -f 3 `
+    if [ "$syslog_enabled" = "True" ]; then
+      syslog_cmd="--syslog"
+    fi
+    syslog_server=`cat $conf_dir/core.cfg | grep 'ail_logs_syslog_server' | cut -d " " -f 3 `
+    syslog_port=`cat $conf_dir/core.cfg | grep 'ail_logs_syslog_port' | cut -d " " -f 3 `
+    if [ ! -z "$syslog_server" -a "$str" != " " ]; then
+        syslog_cmd="${syslog_cmd} -ss ${syslog_server}"
+        if [ ! -z "$syslog_port" -a "$str" != " " ]; then
+            syslog_cmd="${syslog_cmd} -sp ${syslog_port}"
+        fi
+    fi
+    syslog_facility=`cat $conf_dir/core.cfg | grep 'ail_logs_syslog_facility' | cut -d " " -f 3 `
+    if [ ! -z "$syslog_facility" -a "$str" != " " ]; then
+        syslog_cmd="${syslog_cmd} -sf ${syslog_facility}"
+    fi
+    syslog_level=`cat $conf_dir/core.cfg | grep 'ail_logs_syslog_level' | cut -d " " -f 3 `
+    if [ ! -z "$syslog_level" -a "$str" != " " ]; then
+        syslog_cmd="${syslog_cmd} -sl ${syslog_level}"
+    fi
+
     screen -dmS "Logging_AIL"
     sleep 0.1
     echo -e $GREEN"\t* Launching logging process"$DEFAULT
-    screen -S "Logging_AIL" -X screen -t "LogQueue" bash -c "cd ${AIL_BIN}; ${AIL_VENV}/bin/log_subscriber -p 6380 -c Queuing -l ../logs/; read x"
+    screen -S "Logging_AIL" -X screen -t "LogQueue" bash -c "cd ${AIL_BIN}; ${AIL_VENV}/bin/log_subscriber -p 6380 -c Queuing -l ../logs/ ${syslog_cmd}; read x"
     sleep 0.1
-    screen -S "Logging_AIL" -X screen -t "LogScript" bash -c "cd ${AIL_BIN}; ${AIL_VENV}/bin/log_subscriber -p 6380 -c Script -l ../logs/; read x"
+    screen -S "Logging_AIL" -X screen -t "LogScript" bash -c "cd ${AIL_BIN}; ${AIL_VENV}/bin/log_subscriber -p 6380 -c Script -l ../logs/ ${syslog_cmd}; read x"
     sleep 0.1
-    screen -S "Logging_AIL" -X screen -t "LogScript" bash -c "cd ${AIL_BIN}; ${AIL_VENV}/bin/log_subscriber -p 6380 -c Sync -l ../logs/; read x"
+    screen -S "Logging_AIL" -X screen -t "LogScript" bash -c "cd ${AIL_BIN}; ${AIL_VENV}/bin/log_subscriber -p 6380 -c Sync -l ../logs/ ${syslog_cmd}; read x"
 }
 
 function launching_queues {
@@ -235,6 +249,8 @@ function launching_scripts {
     ##################################
     #       TRACKERS MODULES         #
     ##################################
+    screen -S "Script_AIL" -X screen -t "Tracker_Typo_Squatting" bash -c "cd ${AIL_BIN}/trackers; ${ENV_PY} ./Tracker_Typo_Squatting.py; read x"
+    sleep 0.1
     screen -S "Script_AIL" -X screen -t "Tracker_Term" bash -c "cd ${AIL_BIN}/trackers; ${ENV_PY} ./Tracker_Term.py; read x"
     sleep 0.1
     screen -S "Script_AIL" -X screen -t "Tracker_Regex" bash -c "cd ${AIL_BIN}/trackers; ${ENV_PY} ./Tracker_Regex.py; read x"
@@ -443,12 +459,12 @@ function launch_feeder {
 }
 
 function killscript {
-    if [[ $islogged || $isqueued || $is_ail_core || $isscripted || $isflasked || $isfeeded || $iscrawler ]]; then
+    if [[ $islogged || $isqueued || $is_ail_core || $isscripted || $isflasked || $isfeeded || $iscrawler || $is_ail_2_ail ]]; then
         echo -e $GREEN"Killing Script"$DEFAULT
-        kill $islogged $isqueued $is_ail_core $isscripted $isflasked $isfeeded $iscrawler
+        kill $islogged $isqueued $is_ail_core $isscripted $isflasked $isfeeded $iscrawler $is_ail_2_ail
         sleep 0.2
         echo -e $ROSE`screen -ls`$DEFAULT
-        echo -e $GREEN"\t* $islogged $isqueued $is_ail_core $isscripted $isflasked $isfeeded $iscrawler killed."$DEFAULT
+        echo -e $GREEN"\t* $islogged $isqueued $is_ail_core $isscripted $isflasked $isfeeded $iscrawler $is_ail_2_ail killed."$DEFAULT
     else
         echo -e $RED"\t* No script to kill"$DEFAULT
     fi
